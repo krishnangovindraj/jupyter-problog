@@ -1,0 +1,1 @@
+Here, we try to write a problog kernel for jupyter. Because nothing screams data-science like a jupyter notebook.
