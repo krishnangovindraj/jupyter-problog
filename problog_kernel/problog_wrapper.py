@@ -5,6 +5,8 @@ from problog.program import PrologString
 
 from problog.logic import And, Not, Term, AnnotatedDisjunction, Clause
 
+from .query_session import QuerySession
+
 class ProblogWrapper:
 
     def __init__(self):
@@ -53,50 +55,14 @@ class ProblogWrapper:
 
         return queries, evidence
 
+    """ Run a single query - ground, compile and evaluate. For multiple queries, Use a QuerySession """
     def query(self, queries: "List[problog.logic.Term]", evidence: "List[problog.logic.Term]"):
         lf = self.engine.ground_all(self.db, queries=queries, evidence=evidence)
         return get_evaluatable().create_from(lf).evaluate()
 
-    def inline_query(self, c):
-        def _conj2list(conj):
-            def _conj2list_rec(conj, acc):
-                if isinstance(conj, And):
-                    acc.append(conj.args[0])
-                    return _conj2list_rec(conj.args[1], acc)
-                else:
-                    acc.append(conj)
-                    return acc
+    def create_query_session(self):
+        return QuerySession(self.engine, self.db)
 
-            return _conj2list_rec(conj, [])
-
-        # Can be And, Or, query/1, inline [conditional] query 
-        result_str = io.StringIO()
-        try:
-            if c.signature == "listing/0":
-                self._listing(result_str)
-            elif c.signature in ["consult/1", "use_module/1"]:
-                self._consult(c)
-                # show('%% Consulted file %s' % c.args[0])
-            elif c.signature == "query/1":
-                self._query1(c, result_str)
-            else:
-                if c.functor == "'|'":
-                    queries = [c.args[0]]
-                    evidence = _conj2list(c.args[1]) # I hope it was a conj
-                else:
-                    queries = [c]
-                    evidence = []
-
-        except ProbLogError as err:
-            print(str(err), file=result_str)
-        except Exception as err:
-            print(str(err), file=result_str)
-            from traceback import print_exc
-            print_exc(file=result_str)
-
-        result = result_str.getvalue()
-        result_str.close()
-        return result
 
     # private
     def _forget_cell(self, cell_id):

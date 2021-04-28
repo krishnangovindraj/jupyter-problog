@@ -1,4 +1,7 @@
 {
     "argv":["python","-m","problog_kernel", "-f", "{connection_file}"],
-    "display_name":"Problog"
+    "name": "problog",
+    "display_name":"Problog",
+    "language": "problog",
+    "codemirror_mode": "prolog"
 }
