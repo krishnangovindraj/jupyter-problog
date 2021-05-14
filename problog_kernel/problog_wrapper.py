@@ -7,29 +7,28 @@ from problog.logic import And, Not, Term, AnnotatedDisjunction, Clause
 
 from .query_session import QuerySession
 
+
+from metaproblog.theory_manager import TheoryManager
+
 class ProblogWrapper:
 
     def __init__(self):
         self.engine = DefaultEngine()
         self.db = self.engine.prepare([])
-
+        self.theory_manager = TheoryManager.initialize(self.db)
         self.cell_heads = {} # cell_id -> set(Tuple[head, node_index])
         self.cell_range = {}
 
-    # public 
+    # public
+    def process_cell(self, cell_id_user, code: "problog.program.PrologString"):
+        cell_id = self._cell_theory_id(cell_id_user) # Rename it a little
 
-    def process_cell(self, cell_id, code: "problog.program.PrologString"):
-        # TODO: consider not removing and re-adding unmodified clauses? (Beware: clause-ordering)
-        if cell_id is not None and cell_id in self.cell_heads:
-            self._forget_cell(cell_id)
+        if cell_id is not None and self.theory_manager.theory_exists(cell_id):
+            self.theory_manager.remove_theory(cell_id)
 
-        self.cell_heads[cell_id] = []
-        self.cell_range[cell_id] = (-1, -1)
-        range_start = len(self.db)
-
+        statement_list = []
         queries = []
         evidence = []
-
         for stmt in code:
             if stmt.signature == "query/1":
                 queries.append(stmt.args[0])
@@ -37,23 +36,15 @@ class ProblogWrapper:
                 ev = (stmt.args[0].args[0], False)  if isinstance(stmt.args[0], Not) else (stmt.args[0], True)
                 evidence.append( ev ) # TODO: handle negations
             else:
-                self.db.add_statement(stmt)
-                # Go in reverse to find a 
-                if isinstance(stmt, AnnotatedDisjunction):
-                    heads = stmt.heads
-                elif isinstance(stmt, Clause):
-                    heads = [stmt.head]
-                else:
-                    heads = [stmt]
+                statement_list.append(stmt)
 
-                for h in heads:
-                    self.cell_heads[cell_id].append( h )
-
-        self.cell_range[cell_id] = (range_start, len(self.db))
-
+        self.theory_manager.add_theory(cell_id, statement_list)
         self.db = self.engine.prepare(self.db) # Does a process_directives
 
         return queries, evidence
+
+    def _cell_theory_id(self, cell_id):
+        return "_pbl_cell_%s"%cell_id
 
     """ Run a single query - ground, compile and evaluate. For multiple queries, Use a QuerySession """
     def query(self, queries: "List[problog.logic.Term]", evidence: "List[problog.logic.Term]"):
@@ -62,21 +53,6 @@ class ProblogWrapper:
 
     def create_query_session(self):
         return QuerySession(self.engine, self.db)
-
-
-    # private
-    def _forget_cell(self, cell_id):
-        range_start, range_end = self.cell_range[cell_id]
-
-        for head in self.cell_heads[cell_id]:
-            define_node = self.db.get_node(self.db.find(head))
-            all_matching_children = define_node.children.find(head)
-
-            to_erase = set(c for c in all_matching_children if  range_start < c  and c < range_end)
-            define_node.children.erase( to_erase )
-
-        self.cell_heads[cell_id] = []
-        self.cell_range[cell_id] = (-1,-1)
 
 
 def _run_tests():
@@ -92,7 +68,7 @@ def _run_tests():
         print("----")
 
     pbl = ProblogWrapper()
-    p1 = (1, """ 
+    p1 = (1, """
     0.2::foo(2); 0.3::foo(3); 0.5::foo(5):- bar(Z).
     """)
 
