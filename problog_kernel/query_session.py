@@ -9,6 +9,9 @@ from problog.logic import And, Not, Term, Clause
 from problog.ddnnf_formula import DDNNF
 from problog.cnf_formula import CNF
 
+from metaproblog.querying.formula_wrapper import FormulaWrapper
+from metaproblog.querying.query_factory import QueryFactory
+
 class QuerySession:
 
     TIQ_HEAD_PREFIX = "_tiq"
@@ -19,31 +22,25 @@ class QuerySession:
         self.tiq_count = 0 # transformed_inline_query
 
         self._compiled = False
-        self.query_count = 0
+        self.lf_wrapper = FormulaWrapper(self.db)
+        self.queries = []
 
-        self.lf = LogicFormula()
-        self.ddnnf = None
     def _compile(self):
-        dag = LogicDAG.create_from(self.lf)     # break cycles in the ground program
-        cnf = CNF.create_from(dag)         # convert to CNF
-        self.ddnnf = DDNNF.create_from(cnf)       # compile CNF to ddnnf
         self._compiled = True
-        return self.ddnnf
 
     """ Add a set of queries which share the same evidence """
-    def prepare_query(self, queries, evidence):
+    def prepare_query(self, queries, evidence, query_type):
         if self._compiled:
             raise ProblogKernelException("QuerySession was compiled. You cannot prepare_query anymore.")
 
-        i = self.query_count
-        for eterm, ebool in evidence:
-            elabel = LogicFormula.LABEL_EVIDENCE_POS if ebool else LogicFormula.LABEL_EVIDENCE_NEG
-            self.lf = self.engine.ground(self.db, eterm, target=self.lf, label=elabel, assume_prepared=True)      # For them
-            self.lf = self.engine.ground(self.db, eterm, target=self.lf, label=(i, elabel), assume_prepared=True) # For me
-        for qterm in queries:
-            self.lf = self.engine.ground(self.db, qterm, target=self.lf, label=(i,LogicFormula.LABEL_QUERY), assume_prepared=True)
+        qobj = QueryFactory.create_query(query_type, queries, evidence, self.lf_wrapper)
 
-        self.query_count += 1
+        if qobj:
+            self.queries.append(qobj)
+            qobj.ground(self.engine)
+            return True
+        else:
+            return False
 
     """ Evaluates all queries added with queries """
     def evaluate_queries(self):
@@ -51,16 +48,8 @@ class QuerySession:
             self._compile()
 
         results = []
-        for i in range(self.query_count):
-            evidence = {}
-            evidence.update({name:True for name,_ in self.ddnnf.get_names((i, LogicFormula.LABEL_EVIDENCE_POS))})
-            evidence.update({name:False for name,_ in self.ddnnf.get_names((i, LogicFormula.LABEL_EVIDENCE_NEG))})
-            q_nodes = self.ddnnf.get_names( (i, LogicFormula.LABEL_QUERY) )
-
-            qresult = []
-            for name,q in q_nodes:
-                qresult.append( (name, self.ddnnf.evaluate(q, evidence=evidence)) )
-            results.append( (qresult, evidence) )
+        for q in self.queries:
+            results.append( q.evaluate(self.engine) )
 
         return results
 
