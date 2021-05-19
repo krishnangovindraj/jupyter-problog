@@ -1,3 +1,4 @@
+from metaproblog.querying.query_factory import QueryFactory
 from sys import stderr as sys_stderr
 import traceback
 from ipykernel.kernelbase import Kernel
@@ -45,12 +46,12 @@ class ProblogKernel(Kernel):
 
             cell_queries, cell_evidence = self.pbl.process_cell(cell_id, PrologString(code))
 
-
+            # TODO: Handle prepare failures
             qs = self.pbl.create_query_session()
             q_desc = []
             if cell_queries:
                 tasks.append( (cell_queries, cell_evidence) )
-                qs.prepare_query(cell_queries, cell_evidence)
+                qs.prepare_query(cell_queries, cell_evidence, QueryFactory.QueryType.PROBABILITY)
                 q_desc.append(None)
 
             for ll in lines:
@@ -60,7 +61,7 @@ class ProblogKernel(Kernel):
                         inlineq = PrologString( l[2:].strip("-") )[0]
                         iq_query, iq_evidence = qs.transform_inline_query(inlineq)
                         tasks.append((iq_query, iq_evidence))
-                        qs.prepare_query(iq_query, iq_evidence)
+                        qs.prepare_query(iq_query, iq_evidence, QueryFactory.QueryType.PROBABILITY)
                         q_desc.append(inlineq)
 
             results = qs.evaluate_queries()

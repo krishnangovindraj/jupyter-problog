@@ -15,6 +15,7 @@ class FormulaWrapper:
         return self._current_version
 
     def compile_to(self, target_class, target_version = None):
+        # TODO: Should we cache intermediate steps to save effort?
         if target_version is None:
             target_version = self._current_version
         
