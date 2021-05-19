@@ -1,11 +1,15 @@
-from metaproblog.querying.query_factory import QueryFactory
+from os import stat
 from sys import stderr as sys_stderr
 import traceback
 from ipykernel.kernelbase import Kernel
-from problog.program import PrologString
+
+from problog.program import PrologString, DefaultPrologFactory
+from problog.parser import PrologParser, Token
 
 from .problog_wrapper import ProblogWrapper
 from .query_session import QuerySession
+from metaproblog.querying.query_factory import QueryFactory
+
 class ProblogKernelException(RuntimeError):
     pass
 
@@ -23,6 +27,10 @@ class ProblogKernel(Kernel):
                      'pygments_lexer': 'prolog',
                      'extension': '.pl'}
     banner = "Problog notebook poc"
+
+    def __init__(self, *args, **kwargs):
+        self.custom_parser = ProblogKernel._create_custom_parser()
+        super().__init__(*args, **kwargs)
 
     def do_execute(self, code, silent, store_history=True, user_expressions=None, allow_stdin=False):
         try:
@@ -44,7 +52,7 @@ class ProblogKernel(Kernel):
                     break
 
 
-            cell_queries, cell_evidence = self.pbl.process_cell(cell_id, PrologString(code))
+            cell_queries, cell_evidence, questions = self.pbl.process_cell(cell_id, PrologString(code, parser=self.custom_parser))
 
             # TODO: Handle prepare failures
             qs = self.pbl.create_query_session()
@@ -54,15 +62,13 @@ class ProblogKernel(Kernel):
                 qs.prepare_query(cell_queries, cell_evidence, QueryFactory.QueryType.PROBABILITY)
                 q_desc.append(None)
 
-            for ll in lines:
-                l = ll.strip()
-                if l:
-                    if l[:2] == "%?":
-                        inlineq = PrologString( l[2:].strip("-") )[0]
-                        iq_query, iq_evidence = qs.transform_inline_query(inlineq)
-                        tasks.append((iq_query, iq_evidence))
-                        qs.prepare_query(iq_query, iq_evidence, QueryFactory.QueryType.PROBABILITY)
-                        q_desc.append(inlineq)
+            for q in questions:
+                mode, inlineq = (q.args[0], q.args[1]) if q.arity == 2 else (None, q.args[0])
+
+                iq_query, iq_evidence = qs.transform_inline_query(inlineq)
+                tasks.append((iq_query, iq_evidence))
+                qs.prepare_query(iq_query, iq_evidence, QueryFactory.QueryType.PROBABILITY)
+                q_desc.append(inlineq)
 
             results = qs.evaluate_queries()
             # TODO: Error handling / acknowledgement of cells without queries running successfully
@@ -155,3 +161,23 @@ class ProblogKernel(Kernel):
             resp += "</table>"
         resp += "</div>"
         return resp
+
+    @staticmethod
+    def _create_custom_parser():
+        PrologParser._custom_token_question = _custom_token_question
+        parser = PrologParser(DefaultPrologFactory(identifier=0)) # CustomPrologParser()
+        parser._token_act2[ord('?')-58] = parser._custom_token_question
+        return parser
+
+
+def _custom_token_question(self, s, pos):
+    return (
+            Token(
+                "?",
+                pos,
+                unop=(1500, "fy", self.factory.build_unop),
+                binop=(1500, "yfx", self.factory.build_binop),
+                functor=self._next_paren_open(s, pos),
+            ),
+            pos + 1,
+        )

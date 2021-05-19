@@ -11,7 +11,7 @@ from .query_session import QuerySession
 from metaproblog.theory_manager import TheoryManager
 
 class ProblogWrapper:
-
+    
     def __init__(self):
         self.engine = DefaultEngine()
         self.db = self.engine.prepare([])
@@ -29,8 +29,11 @@ class ProblogWrapper:
         statement_list = []
         queries = []
         evidence = []
+        questions = []
         for stmt in code:
-            if stmt.signature == "query/1":
+            if stmt.signature == "?/1" or stmt.signature == "?/2":
+                questions.append(stmt)
+            elif stmt.signature == "query/1":
                 queries.append(stmt.args[0])
             elif stmt.signature == "evidence/1":
                 ev = (stmt.args[0].args[0], False)  if isinstance(stmt.args[0], Not) else (stmt.args[0], True)
@@ -41,7 +44,7 @@ class ProblogWrapper:
         self.theory_manager.add_theory(cell_id, statement_list)
         self.db = self.engine.prepare(self.db) # Does a process_directives
 
-        return queries, evidence
+        return queries, evidence, questions
 
     def _cell_theory_id(self, cell_id):
         return "_pbl_cell_%s"%cell_id
