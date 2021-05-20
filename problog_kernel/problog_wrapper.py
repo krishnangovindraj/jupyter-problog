@@ -11,7 +11,7 @@ from .query_session import QuerySession
 from metaproblog.theory_manager import TheoryManager
 
 class ProblogWrapper:
-    
+
     def __init__(self):
         self.engine = DefaultEngine()
         self.db = self.engine.prepare([])

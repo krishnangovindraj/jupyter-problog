@@ -3,6 +3,7 @@ Allows us to take advantage of the compile-once, query-many approach.
 Assumes the user will make the decision on which queries should be grouped in a session.
 """
 from sys import stderr as sys_stderr
+import sys
 
 from problog.formula import LogicFormula, LogicDAG
 from problog.logic import And, Not, Term, Clause
@@ -28,19 +29,37 @@ class QuerySession:
     def _compile(self):
         self._compiled = True
 
+    def _process_query_type_spec(self, query_type_spec):
+        # print(type(query_type_spec), query_type_spec, file=sys_stderr )
+        if isinstance(query_type_spec, Term):
+            query_type = QueryFactory.QueryType[ str.upper(query_type_spec.functor) ]  
+            kwargs = {}
+            if query_type_spec.functor == 'sample':
+                if query_type_spec.arity >= 1:
+                    kwargs['n_samples'] = int(query_type_spec.args[0].functor)
+            
+            return query_type, kwargs
+        elif isinstance(query_type_spec, QueryFactory.QueryType):
+            return query_type_spec, {}
+        else:
+            raise ProblogKernelException("Unknown query_type_spec: %s(%s)"%(type(query_type_spec), query_type_spec))
+        
+
     """ Add a set of queries which share the same evidence """
-    def prepare_query(self, queries, evidence, query_type):
+    def prepare_query(self, queries, evidence, query_type_spec):
         if self._compiled:
             raise ProblogKernelException("QuerySession was compiled. You cannot prepare_query anymore.")
 
-        qobj = QueryFactory.create_query(query_type, queries, evidence, self.lf_wrapper)
+        query_type, kwargs = self._process_query_type_spec(query_type_spec)
+        qobj = QueryFactory.create_query(query_type, queries, evidence, self.lf_wrapper, **kwargs)
+        # print("Created query of type", type(qobj), file=sys_stderr)
 
         if qobj:
             self.queries.append(qobj)
             qobj.ground(self.engine)
-            return True
+            return qobj
         else:
-            return False
+            return None
 
     """ Evaluates all queries added with queries """
     def evaluate_queries(self):
