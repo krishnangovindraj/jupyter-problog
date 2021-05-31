@@ -47,7 +47,7 @@ class ProblogWrapper:
         return queries, evidence, questions
 
     def _cell_theory_id(self, cell_id):
-        return "_pbl_cell_%s"%cell_id
+        return None if cell_id is None else "_pbl_cell_%s"%cell_id 
 
     """ Run a single query - ground, compile and evaluate. For multiple queries, Use a QuerySession """
     def query(self, queries: "List[problog.logic.Term]", evidence: "List[problog.logic.Term]"):
