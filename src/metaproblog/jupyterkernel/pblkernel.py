@@ -1,7 +1,7 @@
 from os import stat
 
 from traitlets.traitlets import _deprecated_method
-from problog_kernel.output_formatting import HTMLOutput
+from .output_formatting import HTMLOutput
 from sys import stderr as sys_stderr
 import traceback
 from ipykernel.kernelbase import Kernel

@@ -1,5 +1,5 @@
 {
-    "argv":["python","-m","problog_kernel", "-f", "{connection_file}"],
+    "argv":["python","-m","metaproblog.jupyterkernel", "-f", "{connection_file}"],
     "name": "problog",
     "display_name":"Problog",
     "language": "problog",
