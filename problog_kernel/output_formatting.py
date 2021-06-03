@@ -62,6 +62,16 @@ class HTMLOutput(OutputFormat):
 
 
     def _format_result_samplequery(self, query, query_info):
+
+        def _str_sample_term(term, query_info):
+            if "inline_query" in query_info:
+                original_iq = query_info["inline_query"]
+                sub_dict = {k:v for (k,v) in zip(query_info["query"][0][0].args, term.args)}
+                return "[%s]"%html_escape(str( original_iq.apply(sub_dict) ))
+            else:
+                return html_escape(str(term))
+
+
         resp = ""
         resp += "<table class=\"query_results\">"
         samples, evidence = query.results
@@ -79,7 +89,9 @@ class HTMLOutput(OutputFormat):
             resp += "\t<tr class=\"query_model\"><td colspan=\"2\"><b>FAILED</b></td></tr>\n"
         else:
             for sample_dict in samples:
-                resp += "\t<tr class=\"query_model\"><td>%s</td></tr>\n"%( ", ".join(str(k) for k in sample_dict if sample_dict[k]))
+                sample_str = ", ".join(_str_sample_term(k, query_info)
+                                    for k in sample_dict if sample_dict[k])
+                resp += "\t<tr class=\"query_model\"><td>%s</td></tr>\n"%( sample_str )
 
         resp += "</table>"
 
