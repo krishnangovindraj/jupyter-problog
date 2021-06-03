@@ -4,7 +4,7 @@ This is a simple [python wrapper kernel](https://jupyter-client.readthedocs.io/e
 ## Installation
 To add the kernel to your jupyter installation, run 
 
-    jupyter kernelspec install --user problog_kernel
+    jupyter kernelspec install --user problogkernel
     
 (Note: You may need to `sudo`)
 
