@@ -1,4 +1,7 @@
 from os import stat
+
+from traitlets.traitlets import _deprecated_method
+from problog_kernel.output_formatting import HTMLOutput
 from sys import stderr as sys_stderr
 import traceback
 from ipykernel.kernelbase import Kernel
@@ -8,6 +11,7 @@ from problog.parser import PrologParser, Token
 
 from .problog_wrapper import ProblogWrapper
 from .query_session import QuerySession
+from .kernel_options import default_options, OptionKeys
 from metaproblog.querying.query_factory import QueryFactory
 
 class ProblogKernelException(RuntimeError):
@@ -29,12 +33,15 @@ class ProblogKernel(Kernel):
     banner = "Problog notebook poc"
 
     def __init__(self, *args, **kwargs):
-        self.custom_parser = ProblogKernel._create_custom_parser()
         super().__init__(*args, **kwargs)
+        self.custom_parser = ProblogKernel._create_custom_parser()
+        self.outputter = HTMLOutput()
+        self.options = {}
+        self.options.update( default_options )
 
     def do_execute(self, code, silent, store_history=True, user_expressions=None, allow_stdin=False):
         try:
-            tasks = []
+            active_options = dict(self.options)
 
             if not hasattr(self, "pbl") or self.pbl is None:
                 self.pbl = ProblogWrapper()
@@ -56,34 +63,36 @@ class ProblogKernel(Kernel):
 
             # TODO: Handle prepare failures
             qs = self.pbl.create_query_session()
-            q_desc = []
-            if cell_queries:
-                tasks.append( (cell_queries, cell_evidence) )
-                qs.prepare_query(cell_queries, cell_evidence, QueryFactory.QueryType.PROBABILITY)
-                q_desc.append(None)
+            queries = []
+            query_info = {}
 
             for q in questions:
                 mode, inlineq = (q.args[0], q.args[1]) if q.arity == 2 else (None, q.args[0])
+                if mode is not None and mode.functor == "set":
+                    self._update_options(inlineq, self.options)
+                    self._update_options(inlineq, active_options)
+                elif mode is not None and mode.functor == "with":
+                    self._update_options(inlineq, active_options)
+                else:
+                    query_type_spec = active_options[OptionKeys.QUERY_TYPE] if mode is None else mode
+                    iq_query, iq_evidence = qs.transform_inline_query(inlineq)
 
-                iq_query, iq_evidence = qs.transform_inline_query(inlineq)
-                tasks.append((iq_query, iq_evidence))
-                qs.prepare_query(iq_query, iq_evidence, QueryFactory.QueryType.PROBABILITY)
-                q_desc.append(inlineq)
+                    qobj = qs.prepare_query(iq_query, iq_evidence, query_type_spec)
+                    queries.append(qobj)
+                    query_info[qobj] = {"query": (iq_query, iq_evidence), "inline_query": inlineq}
+
+            if cell_queries:
+                qobj = qs.prepare_query(cell_queries, cell_evidence, active_options[OptionKeys.QUERY_TYPE])
+                queries.append(qobj)
+                query_info[qobj] = {"query": (cell_queries, cell_evidence)}
 
             results = qs.evaluate_queries()
             # TODO: Error handling / acknowledgement of cells without queries running successfully
 
             if not silent:
                 # Format and send the response
-                if ProblogKernel.HTML_OUTPUT:
-                    # If we feel like html
-                    resp_html = self.format_results_html(results, tasks, q_desc)
-                    html_content = {'data': {'text/html': resp_html}}
-                    self.send_response(self.iopub_socket, 'display_data', html_content)
-                else:
-                    resp_text = self.format_results_text(results, tasks, q_desc)
-                    stream_content = {'name': 'stdout', 'text': resp_text}
-                    self.send_response(self.iopub_socket, 'stream', stream_content)
+                output_type, content = self.outputter.format_all(queries, query_info)
+                self.send_response(self.iopub_socket, output_type, content)
 
 
             return {'status': 'ok',
@@ -104,6 +113,7 @@ class ProblogKernel(Kernel):
             }
             print(traceback)
 
+    """ deprecating """
     def format_results_text(self, results, tasks, q_desc):
         resp = ""
         for i, (query_probs, evidence) in enumerate(results):
@@ -131,41 +141,15 @@ class ProblogKernel(Kernel):
 
         return resp
 
-    def format_results_html(self, results, tasks, q_desc):
-        from html import escape as html_escape
-        resp = "<div class=\"reponse\">"
-        for i, (query_probs, evidence) in enumerate(results):
-            resp += "<table class=\"query_results\">"
-
-            if q_desc[i]:
-                q_head = tasks[i][0][0]
-                assert(q_head.functor[:len(QuerySession.TIQ_HEAD_PREFIX)] == QuerySession.TIQ_HEAD_PREFIX)
-
-                resp += "\t<tr><th colspan=\"2\"><b>?</b> %s</th></tr>\n"%html_escape(str(q_desc[i]))
-                if evidence:
-                    resp += "\t<th colspan=\"2\"><b>evidence:</b> %s</th></tr>\n"%html_escape(str(evidence))
-                if len(query_probs)==1 and isinstance(query_probs[0][1], dict):
-                    resp += "\t<tr class=\"query_model\"><td colspan=\"2\"><b>FAILED</b></td></tr>\n"
-                else:
-                    for q,p in query_probs:
-                        subs =  html_escape(", ".join( ("%s=%s"%(varname,varval)) for varname,varval in zip(q_head.args,q.args) ))
-                        resp += "\t<tr class=\"query_model\"><td>%f</td><td>%s</td></tr>\n"%(p, subs)
-            else:
-                resp += "\t<tr><th colspan=\"2\">(Cell queries)</th></tr>\n"
-                if evidence:
-                    resp += "\t<tr><th colspan=\"2\"><b>evidence:</b> %s</th></tr>\n"%html_escape(str(evidence))
-                if len(query_probs)==1 and isinstance(query_probs[0][1], dict):
-                    resp += "\t<tr class=\"query_model\"><td colspan=\"2\"><b>FAILED</b></td></tr>\n"
-                else:
-                    resp += "\n".join(["<tr><td>%f</td><td>%s</td></tr>\n"%(p, html_escape(str(q))) for q,p in query_probs])
-            resp += "</table>"
-        resp += "</div>"
-        return resp
+    def _update_options(self, body, which_options):
+        key, value = (body.args[0], body.args[1]) if body.functor == "'='" \
+                            else (body.args[0], True)
+        which_options[key] = value
 
     @staticmethod
     def _create_custom_parser():
         PrologParser._custom_token_question = _custom_token_question
-        parser = PrologParser(DefaultPrologFactory(identifier=0)) # CustomPrologParser()
+        parser = PrologParser(DefaultPrologFactory(identifier=0))
         parser._token_act2[ord('?')-58] = parser._custom_token_question
         return parser
 
