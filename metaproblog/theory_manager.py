@@ -17,9 +17,11 @@ class TheoryManager:
         self._range = {} # TheoryKey -> (StartNode, EndNode)
 
     def theory_exists(self, theory_key):
+        assert( theory_key is not None )
         return theory_key in self._range
 
     def add_theory(self, theory_key, statement_list):
+        assert( theory_key is not None )
         if theory_key not in self._range:
             start = len(self._db)
             for stmt in statement_list:
@@ -32,6 +34,7 @@ class TheoryManager:
             return False
 
     def remove_theory(self, theory_key):
+        assert( theory_key is not None )
         def _is_impl_node(node):
             return isinstance(node, ClauseDB._clause) or isinstance(node, ClauseDB._fact)
 

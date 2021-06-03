@@ -11,13 +11,12 @@ from .query_session import QuerySession
 from metaproblog.theory_manager import TheoryManager
 
 class ProblogWrapper:
-    
+
     def __init__(self):
         self.engine = DefaultEngine()
         self.db = self.engine.prepare([])
         self.theory_manager = TheoryManager.initialize(self.db)
-        self.cell_heads = {} # cell_id -> set(Tuple[head, node_index])
-        self.cell_range = {}
+        self.lambda_cell_id = 0
 
     # public
     def process_cell(self, cell_id_user, code: "problog.program.PrologString"):
@@ -41,13 +40,18 @@ class ProblogWrapper:
             else:
                 statement_list.append(stmt)
 
-        self.theory_manager.add_theory(cell_id, statement_list)
-        self.db = self.engine.prepare(self.db) # Does a process_directives
+        if statement_list:
+            self.theory_manager.add_theory(cell_id, statement_list)
+            self.db = self.engine.prepare(self.db) # Does a process_directives
 
         return queries, evidence, questions
 
     def _cell_theory_id(self, cell_id):
-        return None if cell_id is None else "_pbl_cell_%s"%cell_id 
+        if cell_id is None:
+            self.lambda_cell_id += 1
+            return "_pbl_lambda_cell_%d"%self.lambda_cell_id
+        else:
+            return "_pbl_cell_%s"%cell_id
 
     """ Run a single query - ground, compile and evaluate. For multiple queries, Use a QuerySession """
     def query(self, queries: "List[problog.logic.Term]", evidence: "List[problog.logic.Term]"):
