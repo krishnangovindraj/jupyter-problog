@@ -2,11 +2,15 @@
 This is a simple [python wrapper kernel](https://jupyter-client.readthedocs.io/en/latest/wrapperkernels.html) for [ProbLog](https://dtai.cs.kuleuven.be/problog/).
 
 ## Installation
+To install the module, run (with --user if you prefer)
+
+    python setup.py install
+
 To add the kernel to your jupyter installation, run 
 
     jupyter kernelspec install --user problogkernel
     
-(Note: You may need to `sudo`)
+(Note: jupyter should be using python version used to run setup.py)
 
 ## Usage
 See the [sample](/sample.ipynb) notebook for an overview of the features. See the [ProbLog tutorials](https://dtai.cs.kuleuven.be/problog/tutorial.html) for an introduction to problog.
