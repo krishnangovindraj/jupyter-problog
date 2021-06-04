@@ -16,6 +16,7 @@ from metaproblog.querying.query_factory import QueryFactory
 class QuerySession:
 
     TIQ_HEAD_PREFIX = "_tiq"
+    TIQ_COUNT = 0
 
     def __init__(self, engine, base_db):
         self.engine = engine
@@ -99,8 +100,9 @@ class QuerySession:
             qc = inline_query
             evidence = []
 
+        QuerySession.TIQ_COUNT += 1
         varnames = qc.variables(exclude_local=True)
-        tiq_head_functor = "%s_%d"%(QuerySession.TIQ_HEAD_PREFIX, self.tiq_count)
+        tiq_head_functor = "%s_%d"%(QuerySession.TIQ_HEAD_PREFIX, QuerySession.TIQ_COUNT)
         tiq_head = Term(tiq_head_functor, *varnames)
         self.db.add_statement(Clause(tiq_head, qc))
 
