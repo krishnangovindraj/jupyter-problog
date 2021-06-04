@@ -13,8 +13,7 @@ from metaproblog.theory_manager import TheoryManager
 class ProblogWrapper:
 
     def __init__(self):
-        self.engine = DefaultEngine()
-        self.db = self.engine.prepare([])
+        self.db = self.create_engine().prepare([])
         self.theory_manager = TheoryManager.initialize(self.db)
         self.lambda_cell_id = 0
 
@@ -42,7 +41,7 @@ class ProblogWrapper:
 
         if statement_list:
             self.theory_manager.add_theory(cell_id, statement_list)
-            self.db = self.engine.prepare(self.db) # Does a process_directives
+            self.db = self.create_engine().prepare(self.db) # Does a process_directives
 
         return queries, evidence, questions
 
@@ -55,12 +54,14 @@ class ProblogWrapper:
 
     """ Run a single query - ground, compile and evaluate. For multiple queries, Use a QuerySession """
     def query(self, queries: "List[problog.logic.Term]", evidence: "List[problog.logic.Term]"):
-        lf = self.engine.ground_all(self.db, queries=queries, evidence=evidence)
+        lf = self.create_engine().ground_all(self.db, queries=queries, evidence=evidence)
         return get_evaluatable().create_from(lf).evaluate()
 
     def create_query_session(self):
-        return QuerySession(self.engine, self.db)
+        return QuerySession(self.create_engine(), self.db)
 
+    def create_engine(self):
+        return DefaultEngine()
 
 def _run_tests():
     def _format_evidence(et):
